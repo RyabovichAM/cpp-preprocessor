@@ -30,6 +30,13 @@ bool CheckDirectories(ifstream& in_file, ofstream& out_file, const string& smatc
     }
     return true;
 }
+bool FileOpenInfo(ifstream& file_to_check, const string& filename_where,const smatch& sm, size_t line_counter) {
+    if(!file_to_check.is_open()) {
+        cout << "unknown include file "s << sm[1] << " at file "s << filename_where << " at line " << line_counter << endl;
+        return false;
+    }
+    return true;
+}
 
 bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<path>& include_directories) {
     ifstream in(in_file);
@@ -57,8 +64,7 @@ bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<pa
                 }
             }
 
-            if(!local.is_open()) {
-                cout << "unknown include file "s << sm[1] << " at file "s << in_file.string() << " at line " << line_counter << endl;
+            if(!FileOpenInfo(local, in_file.string(), sm, line_counter)) {
                 return false;
             }
 
@@ -74,8 +80,7 @@ bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<pa
                 return false;
             }
 
-            if(!local.is_open()) {
-                cout << "unknown include file "s << sm[1] << " at file "s << in_file.string() << " at line " << line_counter << endl;
+            if(!FileOpenInfo(local, in_file.string(), sm, line_counter)) {
                 return false;
             }
 
@@ -95,6 +100,10 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
     }
 
     ofstream out(out_file,std::ios::app);
+    if(!out) {
+        return false;
+    }
+
     if(!PreprocessInternal(in_file,out,include_directories)) {
         return false;
     }
