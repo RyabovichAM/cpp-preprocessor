@@ -1,3 +1,4 @@
+#include <array>
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -14,8 +15,90 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-// напишите эту функцию
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
+bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<path>& include_directories) {
+    ifstream in(in_file);
+
+    static const regex local_includes_reg(R"/(\s*#\s*include\s*"([^"]*)"\s*)/");
+    static const regex global_includes_reg(R"/(\s*#\s*include\s*<([^>]*)>\s*)/");
+    smatch sm;
+
+    string input_line;
+    size_t line_counter = 0;
+    while(getline(in, input_line)) {
+        ++line_counter;
+
+        if(regex_match(input_line,sm,local_includes_reg)) {
+            ifstream local;
+            path local_found_path = in_file.parent_path() / sm[1].str();
+            if(filesystem::exists(local_found_path)) {
+                local.open(local_found_path);
+                if(!PreprocessInternal(local_found_path, out_file, include_directories)) {
+                    return false;
+                }
+            } else {
+                for (const auto& incl_dir : include_directories) {
+                    path dirs_found_path;
+                    if(filesystem::exists(path(incl_dir / sm[1].str()))) {
+                        dirs_found_path = incl_dir / sm[1].str();
+                        local.open(dirs_found_path);
+                        if(!PreprocessInternal(dirs_found_path, out_file, include_directories)) {
+                            return false;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if(!local.is_open()) {
+                cout << "unknown include file "s << sm[1] << " at file "s << in_file.string() << " at line " << line_counter << endl;
+                return false;
+            }
+
+            local.close();
+            continue;
+        }
+
+        if(regex_match(input_line,sm,global_includes_reg)) {
+            ifstream local;
+            path found_path;
+
+            for (const auto& incl_dir : include_directories) {
+                if(filesystem::exists(path( incl_dir / sm[1].str()))) {
+                    found_path = incl_dir / sm[1].str();
+                    local.open(found_path);
+                    if(!PreprocessInternal(found_path, out_file, include_directories)) {
+                        return false;
+                    }
+                    break;
+                }
+            }
+
+            if(!local.is_open()) {
+                cout << "unknown include file "s << sm[1] << " at file "s << in_file.string() << " at line " << line_counter << endl;
+                return false;
+            }
+
+            local.close();
+            continue;
+        }
+
+        out_file  << input_line << '\n';
+    };
+    return true;
+}
+
+bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+    ifstream in(in_file);
+    if(!in) {
+        return false;
+    }
+
+    ofstream out(out_file,std::ios::app);
+    if(!PreprocessInternal(in_file,out,include_directories)) {
+        return false;
+    }
+    return true;
+}
 
 string GetFileContents(string file) {
     ifstream stream(file);
