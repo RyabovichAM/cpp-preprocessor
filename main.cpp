@@ -15,6 +15,22 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
+bool PreprocessInternal(const path&, ofstream&, const vector<path>&);
+
+bool CheckDirectories(ifstream& in_file, ofstream& out_file, const string& smatch_path, const vector<path>& include_directories) {
+    for (const auto& incl_dir : include_directories) {
+        if(filesystem::exists(path( incl_dir / smatch_path))) {
+            path found_path = incl_dir / smatch_path;
+            in_file.open(found_path);
+            if(!PreprocessInternal(found_path, out_file, include_directories)) {
+                return false;
+            }
+            break;
+        }
+    }
+    return true;
+}
+
 bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<path>& include_directories) {
     ifstream in(in_file);
 
@@ -29,23 +45,15 @@ bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<pa
 
         if(regex_match(input_line,sm,local_includes_reg)) {
             ifstream local;
-            path local_found_path = in_file.parent_path() / sm[1].str();
-            if(filesystem::exists(local_found_path)) {
-                local.open(local_found_path);
-                if(!PreprocessInternal(local_found_path, out_file, include_directories)) {
+            path found_path = in_file.parent_path() / sm[1].str();
+            if(filesystem::exists(found_path)) {
+                local.open(found_path);
+                if(!PreprocessInternal(found_path, out_file, include_directories)) {
                     return false;
                 }
             } else {
-                for (const auto& incl_dir : include_directories) {
-                    path dirs_found_path;
-                    if(filesystem::exists(path(incl_dir / sm[1].str()))) {
-                        dirs_found_path = incl_dir / sm[1].str();
-                        local.open(dirs_found_path);
-                        if(!PreprocessInternal(dirs_found_path, out_file, include_directories)) {
-                            return false;
-                        }
-                        break;
-                    }
+                if(!CheckDirectories(local, out_file, sm[1].str(), include_directories)) {
+                    return false;
                 }
             }
 
@@ -62,15 +70,8 @@ bool PreprocessInternal(const path& in_file, ofstream& out_file, const vector<pa
             ifstream local;
             path found_path;
 
-            for (const auto& incl_dir : include_directories) {
-                if(filesystem::exists(path( incl_dir / sm[1].str()))) {
-                    found_path = incl_dir / sm[1].str();
-                    local.open(found_path);
-                    if(!PreprocessInternal(found_path, out_file, include_directories)) {
-                        return false;
-                    }
-                    break;
-                }
+            if(!CheckDirectories(local, out_file,sm[1].str(), include_directories)) {
+                return false;
             }
 
             if(!local.is_open()) {
